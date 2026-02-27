@@ -1,0 +1,127 @@
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    command: ["mongod", "--quiet", "--logpath", "/dev/null"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # Management UI: http://localhost:15672 (guest/guest)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  valkey:
+    image: valkey/valkey:7.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Application Services ────────────────────────────────────────────────────
+
+  customer-service:
+    build:
+      context: .
+      dockerfile: packages/customer-service/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      MONGODB_URI: mongodb://mongodb:27017/customer-db
+      SERVICE_API_KEY: ${SERVICE_API_KEY}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  product-service:
+    build:
+      context: .
+      dockerfile: packages/product-service/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: production
+      PORT: "3002"
+      MONGODB_URI: mongodb://mongodb:27017/product-db
+      SERVICE_API_KEY: ${SERVICE_API_KEY}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  order-service:
+    build:
+      context: .
+      dockerfile: packages/order-service/Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      NODE_ENV: production
+      PORT: "3003"
+      MONGODB_URI: mongodb://mongodb:27017/order-db
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      VALKEY_URL: redis://valkey:6379
+      CUSTOMER_SERVICE_URL: http://customer-service:3001
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      PAYMENT_SERVICE_URL: http://payment-service:3004
+      SERVICE_API_KEY: ${SERVICE_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: packages/payment-service/Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      NODE_ENV: production
+      PORT: "3004"
+      MONGODB_URI: mongodb://mongodb:27017/payment-db
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      SERVICE_API_KEY: ${SERVICE_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  rabbitmq_data:
+  valkey_data:

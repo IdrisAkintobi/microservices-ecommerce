@@ -1,0 +1,21 @@
+{
+  "name": "basic-microservice",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev": "docker-compose up --build",
+    "down": "docker-compose down -v",
+    "seed": "bash scripts/seed.sh",
+    "logs": "docker-compose logs -f",
+    "health": "bash scripts/check-health.sh"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
+  }
+}
