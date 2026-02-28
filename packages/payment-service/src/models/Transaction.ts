@@ -20,6 +20,16 @@ const transactionSchema = new Schema<ITransaction>({
   },
   error: { type: String },
   createdAt: { type: Date, default: Date.now },
+}, {
+  toJSON: {
+    transform: (_doc, ret) => {
+      const obj = ret as Record<string, unknown>;
+      obj.id = ret._id.toString();
+      delete obj._id;
+      delete obj.__v;
+      return obj;
+    }
+  }
 });
 
 export const Transaction = mongoose.model<ITransaction>('Transaction', transactionSchema);

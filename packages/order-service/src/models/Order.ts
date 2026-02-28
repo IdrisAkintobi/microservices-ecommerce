@@ -23,6 +23,16 @@ const orderSchema = new Schema<IOrder>({
   },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
+}, {
+  toJSON: {
+    transform: (_doc, ret) => {
+      const obj = ret as Record<string, unknown>;
+      obj.id = ret._id.toString();
+      delete obj._id;
+      delete obj.__v;
+      return obj;
+    }
+  }
 });
 
 orderSchema.pre('save', function(next) {
