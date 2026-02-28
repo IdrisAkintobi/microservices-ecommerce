@@ -69,9 +69,15 @@ services:
       NODE_ENV: production
       PORT: "3002"
       MONGODB_URI: mongodb://mongodb:27017/product-db
+      VALKEY_URL: redis://valkey:6379
+      RABBITMQ_URL: amqp://rabbitmq:5672
       SERVICE_API_KEY: ${SERVICE_API_KEY}
     depends_on:
       mongodb:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 
