@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import { Product } from '../models/Product';
 import { logger } from '../config/logger';
 import { valkey } from '../config/valkey';
@@ -26,7 +27,15 @@ productsRouter.get('/', async (_req, res) => {
 // GET /products/:id
 productsRouter.get('/:id', async (req, res): Promise<void> => {
   try {
-    const product = await Product.findById(req.params.id);
+    const productId = req.params.id;
+
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      res.status(400).json({ error: 'Invalid product ID format' });
+      return;
+    }
+
+    const product = await Product.findById(productId);
     if (!product) {
       res.status(404).json({ error: 'Product not found' });
       return;
@@ -41,6 +50,14 @@ productsRouter.get('/:id', async (req, res): Promise<void> => {
 // POST /products/:id/reserve — reserve stock in Valkey
 productsRouter.post('/:id/reserve', async (req, res): Promise<void> => {
   try {
+    const productId = req.params.id;
+
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      res.status(400).json({ error: 'Invalid product ID format' });
+      return;
+    }
+
     const parsed = reserveStockSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -48,7 +65,6 @@ productsRouter.post('/:id/reserve', async (req, res): Promise<void> => {
     }
 
     const { quantity } = parsed.data;
-    const productId = req.params.id;
 
     // Get product from MongoDB
     const product = await Product.findById(productId);

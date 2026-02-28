@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import { Order } from '../models/Order';
 import { logger } from '../config/logger';
 import { checkIdempotency, setIdempotency } from '../services/idempotency';
@@ -10,8 +11,12 @@ import type { OrderResponse } from '@microservice/shared';
 export const ordersRouter = Router();
 
 const createOrderSchema = z.object({
-  customerId: z.string().min(1),
-  productId: z.string().min(1),
+  customerId: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
+    message: 'Invalid customer ID format',
+  }),
+  productId: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
+    message: 'Invalid product ID format',
+  }),
   quantity: z.number().int().positive(),
 });
 
@@ -110,7 +115,15 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
 // GET /orders/:id — get order details
 ordersRouter.get('/:id', async (req, res): Promise<void> => {
   try {
-    const order = await Order.findById(req.params.id);
+    const orderId = req.params.id;
+
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      res.status(400).json({ error: 'Invalid order ID format' });
+      return;
+    }
+
+    const order = await Order.findById(orderId);
     if (!order) {
       res.status(404).json({ error: 'Order not found' });
       return;

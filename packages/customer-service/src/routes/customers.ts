@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import { Customer } from '../models/Customer';
 import { logger } from '../config/logger';
 
@@ -18,7 +19,15 @@ customersRouter.get('/', async (_req, res) => {
 // GET /customers/:id
 customersRouter.get('/:id', async (req, res): Promise<void> => {
   try {
-    const customer = await Customer.findById(req.params.id);
+    const customerId = req.params.id;
+
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(customerId)) {
+      res.status(400).json({ error: 'Invalid customer ID format' });
+      return;
+    }
+
+    const customer = await Customer.findById(customerId);
     if (!customer) {
       res.status(404).json({ error: 'Customer not found' });
       return;
