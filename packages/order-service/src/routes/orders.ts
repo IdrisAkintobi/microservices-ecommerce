@@ -4,7 +4,7 @@ import { Order } from '../models/Order';
 import { logger } from '../config/logger';
 import { checkIdempotency, setIdempotency } from '../services/idempotency';
 import { validateCustomer, reserveStock } from '../services/validation';
-import { generatePaymentLink } from '../services/paymentLink';
+import { generatePaymentToken } from '../services/paymentLink';
 import type { OrderResponse } from '@microservice/shared';
 
 export const ordersRouter = Router();
@@ -15,10 +15,10 @@ const createOrderSchema = z.object({
   quantity: z.number().int().positive(),
 });
 
-// Helper: Build order response with optional payment link
+// Helper: Build order response with optional payment token
 async function buildOrderResponse(order: any): Promise<OrderResponse> {
-  const paymentLink = order.status === 'pending'
-    ? await generatePaymentLink(order._id.toString(), order.productId, order.quantity, order.amount)
+  const paymentToken = order.status === 'pending'
+    ? await generatePaymentToken(order._id.toString(), order.productId, order.quantity, order.amount)
     : undefined;
 
   return {
@@ -29,7 +29,7 @@ async function buildOrderResponse(order: any): Promise<OrderResponse> {
     amount: order.amount,
     status: order.status,
     createdAt: order.createdAt.toISOString(),
-    ...(paymentLink ? { paymentLink } : {}),
+    ...(paymentToken ? { paymentToken } : {}),
   };
 }
 

@@ -78,7 +78,7 @@ export interface OrderResponse {
   quantity: number;
   amount: number;
   status: OrderStatus;
-  paymentLink?: string; // Only present when status is 'pending'
+  paymentToken?: string; // JWT token for payment, only present when status is 'pending'
   createdAt: string;
 }
 

@@ -5,7 +5,7 @@ const JWT_ALGORITHM = 'HS256';
 const JWT_EXPIRATION = '1h';
 const secret = new TextEncoder().encode(config.JWT_SECRET);
 
-export async function generatePaymentLink(
+export async function generatePaymentToken(
   orderId: string,
   productId: string,
   quantity: number,
