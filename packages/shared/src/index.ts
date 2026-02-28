@@ -29,10 +29,12 @@ export type TransactionStatus = 'success' | 'failed';
 
 /**
  * Published by: payment-service  →  exchange: microservice, key: payment.succeeded
- * Consumed by:  consumer-service (saves transaction, updates order, notifies customer)
+ * Consumed by:  order-service (updates order status), product-service (decrements stock)
  */
 export interface PaymentSucceededEvent {
   orderId: string;
+  productId: string;
+  quantity: number;
   amount: number;
   transactionId: string;
   timestamp: string; // ISO 8601
@@ -40,10 +42,12 @@ export interface PaymentSucceededEvent {
 
 /**
  * Published by: payment-service  →  exchange: microservice, key: payment.failed
- * Consumed by:  consumer-service (updates order status to failed)
+ * Consumed by:  order-service (updates order status), product-service (releases reservation)
  */
 export interface PaymentFailedEvent {
   orderId: string;
+  productId: string;
+  quantity: number;
   amount: number;
   error: string;
   timestamp: string; // ISO 8601
@@ -74,7 +78,7 @@ export interface OrderResponse {
   quantity: number;
   amount: number;
   status: OrderStatus;
-  paymentLink: string;
+  paymentLink?: string; // Only present when status is 'pending'
   createdAt: string;
 }
 

@@ -6,7 +6,7 @@ const MAX_RETRIES = 10;
 
 export const valkey = new Redis(config.VALKEY_URL, {
   maxRetriesPerRequest: MAX_RETRIES,
-  retryStrategy(times) {
+  retryStrategy(times: number) {
     if (times > MAX_RETRIES) {
       logger.error('ValKey max retries exceeded');
       return null;
@@ -20,6 +20,6 @@ valkey.on('connect', () => {
   logger.info('ValKey connected');
 });
 
-valkey.on('error', (err) => {
+valkey.on('error', (err: Error) => {
   logger.error({ err }, 'ValKey error');
 });

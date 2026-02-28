@@ -4,6 +4,8 @@ import { logger } from '../config/logger';
 
 interface PaymentTokenPayload {
   orderId: string;
+  productId: string;
+  quantity: number;
   amount: number;
 }
 
@@ -18,6 +20,8 @@ export async function verifyPaymentToken(token: string): Promise<PaymentTokenPay
 
     return {
       orderId: payload.orderId as string,
+      productId: payload.productId as string,
+      quantity: payload.quantity as number,
       amount: payload.amount as number,
     };
   } catch (err) {

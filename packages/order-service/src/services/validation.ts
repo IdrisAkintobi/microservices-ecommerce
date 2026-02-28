@@ -13,18 +13,23 @@ export async function validateCustomer(customerId: string): Promise<boolean> {
   }
 }
 
-export async function validateProduct(productId: string): Promise<{ price: number } | null> {
+export async function reserveStock(productId: string, quantity: number): Promise<{ price: number } | null> {
   try {
-    const response = await fetch(`${config.PRODUCT_SERVICE_URL}/products/${productId}`, {
-      headers: { 'x-service-key': config.SERVICE_API_KEY },
+    const response = await fetch(`${config.PRODUCT_SERVICE_URL}/products/${productId}/reserve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-service-key': config.SERVICE_API_KEY,
+      },
+      body: JSON.stringify({ quantity }),
     });
     
     if (!response.ok) return null;
     
-    const product = await response.json() as { price: number };
-    return { price: product.price };
+    const data = await response.json() as { price: number };
+    return data;
   } catch (err) {
-    logger.warn({ err, productId }, 'Product validation failed');
+    logger.error({ err, productId, quantity }, 'Failed to reserve stock');
     return null;
   }
 }

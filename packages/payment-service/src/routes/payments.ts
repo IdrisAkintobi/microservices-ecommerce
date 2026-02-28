@@ -25,11 +25,11 @@ paymentsRouter.post('/', async (req, res): Promise<void> => {
       return;
     }
 
-    const { orderId, amount } = payload;
+    const { orderId, productId, quantity, amount } = payload;
 
-    logger.info({ orderId, amount, simulate }, 'Processing payment');
+    logger.info({ orderId, productId, quantity, amount, simulate }, 'Processing payment');
 
-    const result = await processPayment(orderId, amount, simulate);
+    const result = await processPayment(orderId, productId, quantity, amount, simulate);
 
     if (result.status === 'success') {
       const response: PaymentResponse = {

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Order } from '../models/Order';
 import { logger } from '../config/logger';
 import { checkIdempotency, setIdempotency } from '../services/idempotency';
-import { validateCustomer, validateProduct } from '../services/validation';
+import { validateCustomer, reserveStock } from '../services/validation';
 import { generatePaymentLink } from '../services/paymentLink';
 import type { OrderResponse } from '@microservice/shared';
 
@@ -14,6 +14,24 @@ const createOrderSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().positive(),
 });
+
+// Helper: Build order response with optional payment link
+async function buildOrderResponse(order: any): Promise<OrderResponse> {
+  const paymentLink = order.status === 'pending'
+    ? await generatePaymentLink(order._id.toString(), order.productId, order.quantity, order.amount)
+    : undefined;
+
+  return {
+    orderId: order._id.toString(),
+    customerId: order.customerId,
+    productId: order.productId,
+    quantity: order.quantity,
+    amount: order.amount,
+    status: order.status,
+    createdAt: order.createdAt.toISOString(),
+    ...(paymentLink ? { paymentLink } : {}),
+  };
+}
 
 // POST /orders — create order and return payment link
 ordersRouter.post('/', async (req, res): Promise<void> => {
@@ -30,23 +48,9 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
     if (existingOrderId) {
       const existingOrder = await Order.findById(existingOrderId);
       if (existingOrder) {
-        logger.info({ orderId: existingOrderId }, 'Returning cached order (idempotent)');
-        
-        const paymentLink = await generatePaymentLink(
-          existingOrder._id.toString(),
-          existingOrder.amount
-        );
-        
-        res.json({
-          orderId: existingOrder._id.toString(),
-          customerId: existingOrder.customerId,
-          productId: existingOrder.productId,
-          quantity: existingOrder.quantity,
-          amount: existingOrder.amount,
-          status: existingOrder.status,
-          paymentLink,
-          createdAt: existingOrder.createdAt.toISOString(),
-        });
+        logger.info({ orderId: existingOrderId, status: existingOrder.status }, 'Returning cached order (idempotent)');
+        const response = await buildOrderResponse(existingOrder);
+        res.json(response);
         return;
       }
     }
@@ -59,24 +63,22 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
 
     const { customerId, productId, quantity } = parsed.data;
 
-    // Validate customer and product exist
-    const [customerValid, product] = await Promise.all([
-      validateCustomer(customerId),
-      validateProduct(productId),
-    ]);
-
+    // Validate customer exists
+    const customerValid = await validateCustomer(customerId);
     if (!customerValid) {
       res.status(404).json({ error: 'Customer not found' });
       return;
     }
 
-    if (!product) {
-      res.status(404).json({ error: 'Product not found' });
+    // Reserve stock and get product price
+    const productData = await reserveStock(productId, quantity);
+    if (!productData) {
+      res.status(409).json({ error: 'Product not found or insufficient stock' });
       return;
     }
 
     // Calculate amount from product price
-    const amount = product.price * quantity;
+    const amount = productData.price * quantity;
 
     // Create order (status: pending, awaiting payment)
     const order = new Order({
@@ -92,22 +94,9 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
     // Store idempotency key
     await setIdempotency(idempotencyKey, order._id.toString());
 
-    // Generate payment link with JWT
-    const paymentLink = await generatePaymentLink(order._id.toString(), amount);
+    logger.info({ orderId: order._id, amount }, 'Order created');
 
-    logger.info({ orderId: order._id, amount, paymentLink }, 'Order created with payment link');
-
-    const response: OrderResponse = {
-      orderId: order._id.toString(),
-      customerId,
-      productId,
-      quantity,
-      amount,
-      status: order.status,
-      paymentLink,
-      createdAt: order.createdAt.toISOString(),
-    };
-
+    const response = await buildOrderResponse(order);
     res.status(201).json(response);
   } catch (err) {
     logger.error({ err }, 'Failed to create order');
@@ -124,19 +113,7 @@ ordersRouter.get('/:id', async (req, res): Promise<void> => {
       return;
     }
 
-    const paymentLink = await generatePaymentLink(order._id.toString(), order.amount);
-
-    const response: OrderResponse = {
-      orderId: order._id.toString(),
-      customerId: order.customerId,
-      productId: order.productId,
-      quantity: order.quantity,
-      amount: order.amount,
-      status: order.status,
-      paymentLink,
-      createdAt: order.createdAt.toISOString(),
-    };
-
+    const response = await buildOrderResponse(order);
     res.json(response);
   } catch (err) {
     logger.error({ err }, 'Failed to fetch order');

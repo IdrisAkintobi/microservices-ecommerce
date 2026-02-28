@@ -17,10 +17,12 @@ function simulatePayment(simulate?: 'success' | 'failure'): 'success' | 'failed'
 
 export async function processPayment(
   orderId: string,
+  productId: string,
+  quantity: number,
   amount: number,
   simulate?: 'success' | 'failure'
 ): Promise<PaymentResult> {
-  logger.info({ orderId, amount }, 'Processing payment');
+  logger.info({ orderId, productId, quantity, amount }, 'Processing payment');
 
   // Simulate payment gateway delay (1-3 seconds)
   await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
@@ -42,7 +44,7 @@ export async function processPayment(
   logger.info({ transactionId, orderId, status }, 'Transaction saved');
 
   // Publish event based on payment status
-  await publishPaymentEvent(orderId, amount, transactionId, status);
+  await publishPaymentEvent(orderId, productId, quantity, amount, transactionId, status);
 
   return {
     transactionId,
@@ -53,6 +55,8 @@ export async function processPayment(
 
 async function publishPaymentEvent(
   orderId: string,
+  productId: string,
+  quantity: number,
   amount: number,
   transactionId: string,
   status: 'success' | 'failed'
@@ -61,6 +65,8 @@ async function publishPaymentEvent(
     case 'success':
       await publishPaymentSucceeded({
         orderId,
+        productId,
+        quantity,
         amount,
         transactionId,
         timestamp: new Date().toISOString(),
@@ -71,6 +77,8 @@ async function publishPaymentEvent(
     case 'failed':
       await publishPaymentFailed({
         orderId,
+        productId,
+        quantity,
         amount,
         error: 'Payment declined by gateway',
         timestamp: new Date().toISOString(),
