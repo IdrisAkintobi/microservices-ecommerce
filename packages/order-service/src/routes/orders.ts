@@ -72,8 +72,11 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
 
     // Reserve stock and get product price
     const productData = await reserveStock(productId, quantity);
-    if (!productData) {
-      res.status(409).json({ error: 'Product not found or insufficient stock' });
+    if ('error' in productData) {
+      res.status(productData.error === 'Product not found' ? 404 : 409).json({ 
+        error: productData.error,
+        ...(productData.available !== undefined && { available: productData.available })
+      });
       return;
     }
 

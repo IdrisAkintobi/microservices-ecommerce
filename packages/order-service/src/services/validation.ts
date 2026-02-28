@@ -13,7 +13,10 @@ export async function validateCustomer(customerId: string): Promise<boolean> {
   }
 }
 
-export async function reserveStock(productId: string, quantity: number): Promise<{ price: number } | null> {
+export async function reserveStock(
+  productId: string, 
+  quantity: number
+): Promise<{ price: number } | { error: string; available?: number }> {
   try {
     const response = await fetch(`${config.PRODUCT_SERVICE_URL}/products/${productId}/reserve`, {
       method: 'POST',
@@ -24,12 +27,23 @@ export async function reserveStock(productId: string, quantity: number): Promise
       body: JSON.stringify({ quantity }),
     });
     
-    if (!response.ok) return null;
-    
-    const data = await response.json() as { price: number };
-    return data;
+    if (response.ok) {
+      const data = await response.json() as { price: number };
+      return data;
+    }
+
+    if (response.status === 404) {
+      return { error: 'Product not found' };
+    }
+
+    if (response.status === 409) {
+      const data = await response.json() as { error: string; available: number };
+      return { error: data.available === 0 ? 'Out of stock' : 'Insufficient stock.', available: data.available };
+    }
+
+    return { error: 'Failed to reserve stock' };
   } catch (err) {
     logger.error({ err, productId, quantity }, 'Failed to reserve stock');
-    return null;
+    return { error: 'Failed to reserve stock' };
   }
 }
