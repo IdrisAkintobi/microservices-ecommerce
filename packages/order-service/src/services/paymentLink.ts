@@ -1,9 +1,15 @@
-import { SignJWT } from 'jose';
-import { config } from '../config';
+import { randomUUID } from 'crypto';
+import { valkey } from '../config/valkey';
 
-const JWT_ALGORITHM = 'HS256';
-const JWT_EXPIRATION = '1h';
-const secret = new TextEncoder().encode(config.JWT_SECRET);
+const PAYMENT_SESSION_TTL = 3600; // 1 hour in seconds
+
+interface PaymentSession {
+  orderId: string;
+  productId: string;
+  quantity: number;
+  amount: number;
+  createdAt: string;
+}
 
 export async function generatePaymentToken(
   orderId: string,
@@ -11,11 +17,19 @@ export async function generatePaymentToken(
   quantity: number,
   amount: number
 ): Promise<string> {
-  const token = await new SignJWT({ orderId, productId, quantity, amount })
-    .setProtectedHeader({ alg: JWT_ALGORITHM })
-    .setIssuedAt()
-    .setExpirationTime(JWT_EXPIRATION)
-    .sign(secret);
+  const sessionId = randomUUID();
 
-  return `${config.PAYMENT_SERVICE_URL}/payments?token=${token}`;
+  // Store payment session in Valkey
+  const session: PaymentSession = {
+    orderId,
+    productId,
+    quantity,
+    amount,
+    createdAt: new Date().toISOString(),
+  };
+
+  const sessionKey = `payment:session:${sessionId}`;
+  await valkey.setex(sessionKey, PAYMENT_SESSION_TTL, JSON.stringify(session));
+
+  return sessionId;
 }

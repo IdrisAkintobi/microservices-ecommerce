@@ -15,8 +15,8 @@
     "mongoose": "^8.9.5",
     "pino": "^9.6.0",
     "zod": "^3.24.1",
-    "jose": "^5.9.6",
-    "amqplib": "^0.10.5"
+    "amqplib": "^0.10.5",
+    "ioredis": "^5.4.2"
   },
   "devDependencies": {
     "@microservice/shared": "*",
@@ -25,6 +25,7 @@
     "@types/amqplib": "^0.10.5",
     "pino-pretty": "^13.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "@types/ioredis": "^5.0.0"
   }
 }

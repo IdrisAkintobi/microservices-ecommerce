@@ -1,31 +1,36 @@
 import { Router } from 'express';
-import { verifyPaymentToken } from '../services/jwt';
 import { processPayment } from '../services/payment';
 import { logger } from '../config/logger';
+import { valkey } from '../config/valkey';
 import type { PaymentResponse } from '@microservice/shared';
 
 export const paymentsRouter = Router();
 
-// POST /payments?token={jwt}&simulate=success|failure
+// POST /payments?token={sessionId}&simulate=success|failure
 paymentsRouter.post('/', async (req, res): Promise<void> => {
   try {
-    const token = req.query.token as string;
+    const sessionId = req.query.token as string;
     const simulate = req.query.simulate as 'success' | 'failure' | undefined;
     
-    if (!token) {
+    if (!sessionId) {
       res.status(400).json({ error: 'token query parameter is required' });
       return;
     }
 
-    // Verify JWT and extract payload
-    const payload = await verifyPaymentToken(token);
+    // Get payment session from Valkey
+    const sessionKey = `payment:session:${sessionId}`;
+    const sessionData = await valkey.get(sessionKey);
     
-    if (!payload) {
-      res.status(401).json({ error: 'Invalid or expired token' });
+    if (!sessionData) {
+      res.status(409).json({ error: 'Payment session expired or already processed' });
       return;
     }
 
-    const { orderId, productId, quantity, amount } = payload;
+    const session = JSON.parse(sessionData);
+    const { orderId, productId, quantity, amount } = session;
+
+    // Delete session to prevent duplicate payments (consume once)
+    await valkey.del(sessionKey);
 
     logger.info({ orderId, productId, quantity, amount, simulate }, 'Processing payment');
 
