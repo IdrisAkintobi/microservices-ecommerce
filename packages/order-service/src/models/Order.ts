@@ -7,6 +7,7 @@ export interface IOrder extends Document {
   quantity: number;
   amount: number;
   status: OrderStatus;
+  paymentToken?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +24,7 @@ const orderSchema = new Schema<IOrder>(
       default: 'pending',
       index: true,
     },
+    paymentToken: { type: String, required: false },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },

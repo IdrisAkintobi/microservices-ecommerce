@@ -200,7 +200,7 @@ paths:
       tags:
         - orders
       summary: Get order by ID
-      description: Retrieve order details including a fresh payment link
+      description: Retrieve order details. Payment token is only included for pending orders and is the same token generated at order creation.
       parameters:
         - name: id
           in: path

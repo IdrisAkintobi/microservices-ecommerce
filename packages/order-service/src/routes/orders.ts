@@ -21,17 +21,7 @@ const createOrderSchema = z.object({
 });
 
 // Helper: Build order response with optional payment token
-async function buildOrderResponse(order: IOrder): Promise<OrderResponse> {
-  const paymentToken =
-    order.status === 'pending'
-      ? await generatePaymentToken(
-          order._id.toString(),
-          order.productId,
-          order.quantity,
-          order.amount
-        )
-      : undefined;
-
+function buildOrderResponse(order: IOrder): OrderResponse {
   return {
     orderId: order._id.toString(),
     customerId: order.customerId,
@@ -40,7 +30,7 @@ async function buildOrderResponse(order: IOrder): Promise<OrderResponse> {
     amount: order.amount,
     status: order.status,
     createdAt: order.createdAt.toISOString(),
-    ...(paymentToken ? { paymentToken } : {}),
+    ...(order.paymentToken ? { paymentToken: order.paymentToken } : {}),
   };
 }
 
@@ -63,7 +53,7 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
           { orderId: existingOrderId, status: existingOrder.status },
           'Returning cached order (idempotent)'
         );
-        const response = await buildOrderResponse(existingOrder);
+        const response = buildOrderResponse(existingOrder);
         res.json(response);
         return;
       }
@@ -108,12 +98,24 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
 
     await order.save();
 
+    // Generate payment token for new order
+    const paymentToken = await generatePaymentToken(
+      order._id.toString(),
+      productId,
+      quantity,
+      amount
+    );
+
+    // Store payment token in order
+    order.paymentToken = paymentToken;
+    await order.save();
+
     // Store idempotency key
     await setIdempotency(idempotencyKey, order._id.toString());
 
     logger.info({ orderId: order._id, amount }, 'Order created');
 
-    const response = await buildOrderResponse(order);
+    const response = buildOrderResponse(order);
     res.status(201).json(response);
   } catch (err) {
     logger.error({ err }, 'Failed to create order');
@@ -138,7 +140,7 @@ ordersRouter.get('/:id', async (req, res): Promise<void> => {
       return;
     }
 
-    const response = await buildOrderResponse(order);
+    const response = buildOrderResponse(order);
     res.json(response);
   } catch (err) {
     logger.error({ err }, 'Failed to fetch order');
