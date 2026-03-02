@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().int().positive().default(3003),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3003),
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
   VALKEY_URL: z.string().min(1, 'VALKEY_URL is required'),
   CUSTOMER_SERVICE_URL: z.string().min(1, 'CUSTOMER_SERVICE_URL is required'),

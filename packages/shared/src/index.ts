@@ -8,6 +8,26 @@
  * or be generated from a protobuf/OpenAPI schema.
  */
 
+// Export event types for RabbitMQ communication
+export type PaymentSucceededEvent = {
+  orderId: string;
+  transactionId: string;
+  amount: number;
+  timestamp: string;
+  productId?: string;
+  quantity?: number;
+};
+
+export type PaymentFailedEvent = {
+  orderId: string;
+  transactionId?: string;
+  error: string;
+  timestamp: string;
+  productId?: string;
+  quantity?: number;
+  amount?: number;
+};
+
 // ── Order lifecycle state machine ──────────────────────────────────────────
 //
 //   pending → confirmed (payment succeeded)
@@ -16,42 +36,14 @@
 //   confirmed → refunded (payment refunded)
 //
 export type OrderStatus =
-  | 'pending'     // order created, awaiting payment
-  | 'confirmed'   // payment succeeded
-  | 'failed'      // payment failed
-  | 'cancelled'   // user cancelled
-  | 'refunded';   // payment refunded
+  | 'pending' // order created, awaiting payment
+  | 'confirmed' // payment succeeded
+  | 'failed' // payment failed
+  | 'cancelled' // user cancelled
+  | 'refunded'; // payment refunded
 
 // ── Payment outcome ────────────────────────────────────────────────────────
 export type TransactionStatus = 'success' | 'failed';
-
-// ── RabbitMQ event payloads ────────────────────────────────────────────────
-
-/**
- * Published by: payment-service  →  exchange: microservice, key: payment.succeeded
- * Consumed by:  order-service (updates order status), product-service (decrements stock)
- */
-export interface PaymentSucceededEvent {
-  orderId: string;
-  productId: string;
-  quantity: number;
-  amount: number;
-  transactionId: string;
-  timestamp: string; // ISO 8601
-}
-
-/**
- * Published by: payment-service  →  exchange: microservice, key: payment.failed
- * Consumed by:  order-service (updates order status), product-service (releases reservation)
- */
-export interface PaymentFailedEvent {
-  orderId: string;
-  productId: string;
-  quantity: number;
-  amount: number;
-  error: string;
-  timestamp: string; // ISO 8601
-}
 
 // ── Inbound HTTP request bodies ────────────────────────────────────────────
 
