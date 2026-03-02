@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/customer-service" },
+    { "path": "./packages/product-service" },
+    { "path": "./packages/order-service" },
+    { "path": "./packages/payment-service" }
+  ]
+}
