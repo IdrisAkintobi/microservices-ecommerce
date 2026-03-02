@@ -1,38 +1,38 @@
-import express from 'express';
+import { app } from './app';
 import { connectDB } from './config/db';
 import { connectConsumer, disconnectConsumer } from './queue/consumer';
 import { config } from './config';
 import { logger } from './config/logger';
-import { ordersRouter } from './routes/orders';
-import { authenticateService } from './middleware/auth';
 
-const app = express();
+let server: any = null;
 
-app.use(express.json());
+export async function startServer(port?: number): Promise<void> {
+  const serverPort = port || config.PORT;
 
-// Health check endpoint
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
-
-// Auth middleware
-app.use(authenticateService);
-
-// Route handlers
-app.use('/orders', ordersRouter);
-
-async function start() {
-  await connectDB();
-  await connectConsumer();
-  
-  app.listen(config.PORT, () => {
-    logger.info({ port: config.PORT }, 'Order service started');
+  server = app.listen(serverPort, () => {
+    logger.info({ port: serverPort }, 'Order service started');
   });
+}
+
+export async function stopServer(): Promise<void> {
+  if (server) {
+    await new Promise<void>((resolve) => server.close(resolve));
+  }
+  await disconnectConsumer();
+  logger.info('Order service stopped');
 }
 
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
-  await disconnectConsumer();
+  await stopServer();
   process.exit(0);
 });
+
+async function start() {
+  await connectDB();
+  await connectConsumer();
+  await startServer();
+}
 
 start().catch((err) => {
   logger.error({ err }, 'Failed to start order service');
