@@ -8,25 +8,40 @@ const MAX_RETRIES = 10;
 const RETRY_DELAY_MS = 3_000;
 
 let connection: Awaited<ReturnType<typeof amqp.connect>> | null = null;
-let channel: Awaited<ReturnType<Awaited<ReturnType<typeof amqp.connect>>['createChannel']>> | null = null;
+let channel: Awaited<ReturnType<Awaited<ReturnType<typeof amqp.connect>>['createChannel']>> | null =
+  null;
 
 export async function connectPublisher(): Promise<void> {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const conn = await amqp.connect(config.RABBITMQ_URL);
       const ch = await conn.createChannel();
-      
+
       await ch.assertExchange(EXCHANGE, 'topic', { durable: true });
-      
+
+      // Assert queues and bindings for order service
+      await ch.assertQueue('order.payment.succeeded', { durable: true });
+      await ch.bindQueue('order.payment.succeeded', EXCHANGE, 'payment.succeeded');
+
+      await ch.assertQueue('order.payment.failed', { durable: true });
+      await ch.bindQueue('order.payment.failed', EXCHANGE, 'payment.failed');
+
+      // Assert queues and bindings for product service
+      await ch.assertQueue('product.payment.succeeded', { durable: true });
+      await ch.bindQueue('product.payment.succeeded', EXCHANGE, 'payment.succeeded');
+
+      await ch.assertQueue('product.payment.failed', { durable: true });
+      await ch.bindQueue('product.payment.failed', EXCHANGE, 'payment.failed');
+
       connection = conn;
       channel = ch;
-      
+
       logger.info('Payment service publisher connected');
       return;
     } catch (err) {
       logger.warn({ attempt, err }, 'RabbitMQ publisher connection failed, retrying...');
       if (attempt === MAX_RETRIES) throw err;
-      await new Promise<void>(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
     }
   }
 }
@@ -37,7 +52,7 @@ export async function publishPaymentSucceeded(event: PaymentSucceededEvent): Pro
   }
 
   const message = Buffer.from(JSON.stringify(event));
-  
+
   channel.publish(EXCHANGE, 'payment.succeeded', message, {
     persistent: true,
     contentType: 'application/json',
@@ -52,7 +67,7 @@ export async function publishPaymentFailed(event: PaymentFailedEvent): Promise<v
   }
 
   const message = Buffer.from(JSON.stringify(event));
-  
+
   channel.publish(EXCHANGE, 'payment.failed', message, {
     persistent: true,
     contentType: 'application/json',

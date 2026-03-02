@@ -12,41 +12,8 @@ const MAX_RETRIES = 10;
 const RETRY_DELAY_MS = 3_000;
 
 let connection: Awaited<ReturnType<typeof amqp.connect>> | null = null;
-let channel: Awaited<ReturnType<Awaited<ReturnType<typeof amqp.connect>>['createChannel']>> | null = null;
-
-export async function connectConsumer(): Promise<void> {
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const conn = await amqp.connect(config.RABBITMQ_URL);
-      const ch = await conn.createChannel();
-      
-      await ch.assertExchange(EXCHANGE, 'topic', { durable: true });
-      
-      // Success queue
-      await ch.assertQueue(SUCCESS_QUEUE, { durable: true });
-      await ch.bindQueue(SUCCESS_QUEUE, EXCHANGE, 'payment.succeeded');
-      
-      // Failed queue
-      await ch.assertQueue(FAILED_QUEUE, { durable: true });
-      await ch.bindQueue(FAILED_QUEUE, EXCHANGE, 'payment.failed');
-      
-      await ch.prefetch(1);
-      
-      await ch.consume(SUCCESS_QUEUE, handleSuccessMessage, { noAck: false });
-      await ch.consume(FAILED_QUEUE, handleFailedMessage, { noAck: false });
-      
-      connection = conn;
-      channel = ch;
-      
-      logger.info('Product service consumer connected');
-      return;
-    } catch (err) {
-      logger.warn({ attempt, err }, 'RabbitMQ consumer connection failed, retrying...');
-      if (attempt === MAX_RETRIES) throw err;
-      await new Promise<void>(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-    }
-  }
-}
+let channel: Awaited<ReturnType<Awaited<ReturnType<typeof amqp.connect>>['createChannel']>> | null =
+  null;
 
 async function handleSuccessMessage(msg: amqp.ConsumeMessage | null): Promise<void> {
   if (!msg || !channel) return;
@@ -79,31 +46,37 @@ async function handleSuccessMessage(msg: amqp.ConsumeMessage | null): Promise<vo
     );
 
     if (!product) {
-      logger.error({ orderId: event.orderId, productId, quantity }, 'Failed to decrement stock - insufficient stock or product not found');
+      logger.error(
+        { orderId: event.orderId, productId, quantity },
+        'Failed to decrement stock - insufficient stock or product not found'
+      );
       channel.ack(msg);
       return;
     }
 
-    logger.info({ orderId: event.orderId, productId, quantity, newStock: product.stock }, 'Stock decremented in MongoDB');
-    
+    logger.info(
+      { orderId: event.orderId, productId, quantity, newStock: product.stock },
+      'Stock decremented in MongoDB'
+    );
+
     // Decrement Valkey reservation
     const reservationKey = `reservation:${productId}`;
     const exists = await valkey.exists(reservationKey);
-    
+
     if (exists) {
       const newValue = await valkey.decrby(reservationKey, quantity);
-      
+
       if (newValue <= 0) {
         await valkey.del(reservationKey);
       }
-      
+
       logger.info({ orderId: event.orderId, productId, quantity }, 'Reservation decremented');
     }
-    
+
     channel.ack(msg);
   } catch (err) {
     logger.error({ err }, 'Failed to process payment.succeeded event');
-    channel.nack(msg, false, false);
+    channel.nack(msg, false, true); // Requeue for retry
   }
 }
 
@@ -126,14 +99,14 @@ async function handleFailedMessage(msg: amqp.ConsumeMessage | null): Promise<voi
     // Release reservation in Valkey (if not expired)
     const reservationKey = `reservation:${productId}`;
     const exists = await valkey.exists(reservationKey);
-    
+
     if (exists) {
       const newValue = await valkey.decrby(reservationKey, quantity);
-      
+
       if (newValue <= 0) {
         await valkey.del(reservationKey);
       }
-      
+
       logger.info({ orderId: event.orderId, productId, quantity }, 'Reservation released');
     } else {
       logger.info({ orderId: event.orderId, productId, quantity }, 'Reservation already expired');
@@ -142,7 +115,41 @@ async function handleFailedMessage(msg: amqp.ConsumeMessage | null): Promise<voi
     channel.ack(msg);
   } catch (err) {
     logger.error({ err }, 'Failed to process payment.failed event');
-    channel.nack(msg, false, false);
+    channel.nack(msg, false, true); // Requeue for retry
+  }
+}
+
+export async function connectConsumer(): Promise<void> {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const conn = await amqp.connect(config.RABBITMQ_URL);
+      const ch = await conn.createChannel();
+
+      await ch.assertExchange(EXCHANGE, 'topic', { durable: true });
+
+      // Success queue
+      await ch.assertQueue(SUCCESS_QUEUE, { durable: true });
+      await ch.bindQueue(SUCCESS_QUEUE, EXCHANGE, 'payment.succeeded');
+
+      // Failed queue
+      await ch.assertQueue(FAILED_QUEUE, { durable: true });
+      await ch.bindQueue(FAILED_QUEUE, EXCHANGE, 'payment.failed');
+
+      await ch.prefetch(1);
+
+      await ch.consume(SUCCESS_QUEUE, handleSuccessMessage, { noAck: false });
+      await ch.consume(FAILED_QUEUE, handleFailedMessage, { noAck: false });
+
+      connection = conn;
+      channel = ch;
+
+      logger.info('Product service consumer connected');
+      return;
+    } catch (err) {
+      logger.warn({ attempt, err }, 'RabbitMQ consumer connection failed, retrying...');
+      if (attempt === MAX_RETRIES) throw err;
+      await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
   }
 }
 

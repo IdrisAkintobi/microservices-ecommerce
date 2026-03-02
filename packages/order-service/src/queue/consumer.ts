@@ -11,38 +11,39 @@ const MAX_RETRIES = 10;
 const RETRY_DELAY_MS = 3_000;
 
 let connection: Awaited<ReturnType<typeof amqp.connect>> | null = null;
-let channel: Awaited<ReturnType<Awaited<ReturnType<typeof amqp.connect>>['createChannel']>> | null = null;
+let channel: Awaited<ReturnType<Awaited<ReturnType<typeof amqp.connect>>['createChannel']>> | null =
+  null;
 
 export async function connectConsumer(): Promise<void> {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const conn = await amqp.connect(config.RABBITMQ_URL);
       const ch = await conn.createChannel();
-      
+
       await ch.assertExchange(EXCHANGE, 'topic', { durable: true });
-      
+
       // Success queue
       await ch.assertQueue(SUCCESS_QUEUE, { durable: true });
       await ch.bindQueue(SUCCESS_QUEUE, EXCHANGE, 'payment.succeeded');
-      
+
       // Failed queue
       await ch.assertQueue(FAILED_QUEUE, { durable: true });
       await ch.bindQueue(FAILED_QUEUE, EXCHANGE, 'payment.failed');
-      
+
       await ch.prefetch(1);
-      
+
       await ch.consume(SUCCESS_QUEUE, handleSuccessMessage, { noAck: false });
       await ch.consume(FAILED_QUEUE, handleFailedMessage, { noAck: false });
-      
+
       connection = conn;
       channel = ch;
-      
+
       logger.info('Order service consumer connected');
       return;
     } catch (err) {
       logger.warn({ attempt, err }, 'RabbitMQ consumer connection failed, retrying...');
       if (attempt === MAX_RETRIES) throw err;
-      await new Promise<void>(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
     }
   }
 }
@@ -68,7 +69,7 @@ async function handleSuccessMessage(msg: amqp.ConsumeMessage | null): Promise<vo
     channel.ack(msg);
   } catch (err) {
     logger.error({ err }, 'Failed to process payment.succeeded event');
-    channel.nack(msg, false, false);
+    channel.nack(msg, false, true); // Requeue for retry
   }
 }
 
@@ -93,7 +94,7 @@ async function handleFailedMessage(msg: amqp.ConsumeMessage | null): Promise<voi
     channel.ack(msg);
   } catch (err) {
     logger.error({ err }, 'Failed to process payment.failed event');
-    channel.nack(msg, false, false);
+    channel.nack(msg, false, true); // Requeue for retry
   }
 }
 
