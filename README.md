@@ -26,28 +26,28 @@ Client → POST /orders → Order Service
          ↓ creates order (pending)
          ↓ generates payment session (ValKey)
          ↓ returns payment token
-         
+
 Client → POST /payments?token={sessionId} → Payment Service
          ↓ retrieves session from ValKey
          ↓ processes payment
          ↓ publishes payment.succeeded/failed event
          ↓ returns transaction result
-         
+
 Order Service (consumer) → updates order status
 Product Service (consumer) → decrements stock
 ```
 
 ## Services
 
-| Service | Port | Database | Purpose |
-|---------|------|----------|---------|
-| customer-service | 3001 | customer-db | Customer management |
-| product-service | 3002 | product-db | Product catalog + stock management |
-| order-service | 3003 | order-db | Order creation + payment sessions |
-| payment-service | 3004 | payment-db | Payment processing + transactions |
-| MongoDB | 27017 | - | Data storage |
-| RabbitMQ | 5672, 15672 | - | Event messaging |
-| ValKey | 6379 | - | Idempotency + caching |
+| Service          | Port        | Database    | Purpose                            |
+| ---------------- | ----------- | ----------- | ---------------------------------- |
+| customer-service | 3001        | customer-db | Customer management                |
+| product-service  | 3002        | product-db  | Product catalog + stock management |
+| order-service    | 3003        | order-db    | Order creation + payment sessions  |
+| payment-service  | 3004        | payment-db  | Payment processing + transactions  |
+| MongoDB          | 27017       | -           | Data storage                       |
+| RabbitMQ         | 5672, 15672 | -           | Event messaging                    |
+| ValKey           | 6379        | -           | Idempotency + caching              |
 
 ## Key Features
 
@@ -73,6 +73,7 @@ Product Service (consumer) → decrements stock
 ## API Examples
 
 ### Create Order
+
 ```bash
 # Get customer and product IDs first
 ./scripts/get-ids.sh
@@ -99,6 +100,7 @@ curl -X POST http://localhost:3003/orders \
 ```
 
 ### Process Payment
+
 ```bash
 # Use paymentToken from order response
 curl -X POST "http://localhost:3004/payments?token=550e8400-e29b-41d4-a716-446655440000&simulate=success"
@@ -118,16 +120,30 @@ curl -X POST "http://localhost:3004/payments?token=550e8400-e29b-41d4-a716-44665
 npm run dev          # Start all services
 npm run down         # Stop and remove volumes
 npm run logs         # View all logs
-npm run health       # Check service health
 npm run seed         # Seed databases
 npm run build        # Build all services
+npm test             # Run all tests
+```
+
+## Testing
+
+- **Framework**: Jest + TypeScript + Supertest
+- **Database**: MongoDB Memory Server (in-memory)
+- **Mocks**: Redis/RabbitMQ mocked, MongoDB real operations
+- **API Testing**: Import `openapi.yml` into Postman/Insomnia for manual testing
+
+```bash
+# All tests
+npm test
+
+# Specific service
+npm test -w packages/customer-service
 ```
 
 ## Monitoring
 
 - **RabbitMQ UI**: http://localhost:15672 (guest/guest)
 - **Logs**: `docker compose logs -f <service-name>`
-- **Health**: `npm run health`
 
 ## Documentation
 

@@ -1,0 +1,400 @@
+openapi: 3.0.3
+info:
+  title: Microservices E-Commerce API
+  description: |
+    Event-driven microservices architecture for e-commerce with JWT-based payment links.
+
+    ## Architecture Flow
+    1. Client creates order → Order service generates JWT payment link
+    2. Client uses payment link → Payment service verifies JWT and processes payment
+    3. Payment service publishes event → Order service updates order status
+
+    ## Services
+    - **Customer Service** (port 3001): Read-only customer data
+    - **Product Service** (port 3002): Read-only product catalog
+    - **Order Service** (port 3003): Order management with payment link generation
+    - **Payment Service** (port 3004): Payment processing with event publishing
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:3001
+    description: Customer Service
+  - url: http://localhost:3002
+    description: Product Service
+  - url: http://localhost:3003
+    description: Order Service
+  - url: http://localhost:3004
+    description: Payment Service
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: customers
+    description: Customer management operations
+  - name: products
+    description: Product catalog operations
+  - name: orders
+    description: Order management operations
+  - name: payments
+    description: Payment processing operations
+
+paths:
+  /customers:
+    get:
+      tags:
+        - customers
+      summary: List all customers
+      description: Retrieve all customers (for testing/validation)
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Customer'
+
+  /customers/{id}:
+    get:
+      tags:
+        - customers
+      summary: Get customer by ID
+      description: Retrieve a specific customer for validation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId
+          schema:
+            type: string
+            example: '65f1234567890abcdef12345'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          description: Customer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products:
+    get:
+      tags:
+        - products
+      summary: List all products
+      description: Retrieve all products from the catalog
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+
+  /products/{id}:
+    get:
+      tags:
+        - products
+      summary: Get product by ID
+      description: Retrieve a specific product for validation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId
+          schema:
+            type: string
+            example: '69a26de7eb232695dc045f63'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+              example:
+                name: 'HP Laptop 15-inch'
+                price: 520000
+                stock: 24
+                createdAt: '2026-02-28T04:24:07.368Z'
+                id: '69a26de7eb232695dc045f6a'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders:
+    post:
+      tags:
+        - orders
+      summary: Create a new order
+      description: |
+        Create an order and receive a JWT-signed payment link.
+        The payment link contains the order ID and amount, valid for 1 hour.
+
+        **Idempotency**: Use the `idempotency-key` header to prevent duplicate orders.
+      parameters:
+        - name: idempotency-key
+          in: header
+          required: true
+          description: Unique key to ensure idempotent order creation
+          schema:
+            type: string
+            example: 'order-2026-02-28-id-1234'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              customerId: '69a26de7bec2de407696459a'
+              productId: '69a26de7eb232695dc045f6a'
+              quantity: 4
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                orderId: '69a2ad6ed39f9a83c4e9c527'
+                customerId: '69a26de7bec2de407696459a'
+                productId: '69a26de7eb232695dc045f6a'
+                quantity: 1
+                amount: 520000
+                status: 'pending'
+                createdAt: '2026-02-28T08:55:10.142Z'
+                paymentToken: '044984a5-5e27-4295-9f5f-d14db05e6260'
+        '409':
+          description: Insufficient stock
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  available:
+                    type: integer
+              example:
+                error: 'Insufficient stock.'
+                available: 24
+
+  /orders/{id}:
+    get:
+      tags:
+        - orders
+      summary: Get order by ID
+      description: Retrieve order details including a fresh payment link
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId
+          schema:
+            type: string
+            example: '69a28257b2a24b4c99597708'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                orderId: '69a28257b2a24b4c99597706'
+                customerId: '69a26de7bec2de407696459a'
+                productId: '69a26de7eb232695dc045f6a'
+                quantity: 5
+                amount: 2600000
+                status: 'confirmed'
+                createdAt: '2026-02-28T05:51:19.600Z'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Order not found'
+
+  /payments:
+    post:
+      tags:
+        - payments
+      summary: Process payment
+      description: |
+        Process payment using JWT token from payment link.
+
+        **Simulation**: Use `simulate` query parameter to control payment outcome:
+        - `success`: Force successful payment
+        - `failure`: Force failed payment
+        - (omitted): Defaults to success
+
+        **Note**: Payment processing takes 1-3 seconds to simulate gateway delay.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: UUID token from payment link
+          schema:
+            type: string
+            format: uuid
+            example: '268a2e9e-daa9-46b4-95a9-e0f62b3a94e2'
+        - name: simulate
+          in: query
+          required: false
+          description: Simulate payment outcome (defaults to success)
+          schema:
+            type: string
+            enum: [success, failure]
+      responses:
+        '200':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+              example:
+                transactionId: '8530db4e-4505-4813-9f62-149eb0758856'
+                orderId: '69a2ad6ed39f9a83c4e9c527'
+                amount: 520000
+                status: 'success'
+        '409':
+          description: Payment session expired or already processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Payment session expired or already processed'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-service-key
+      description: Service API key for authentication
+
+  schemas:
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+          description: MongoDB ObjectId
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        createdAt:
+          type: string
+          format: date-time
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          description: MongoDB ObjectId
+        name:
+          type: string
+        price:
+          type: integer
+          description: Price in smallest currency unit
+        stock:
+          type: integer
+          description: Available stock quantity
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - customerId
+        - productId
+        - quantity
+      properties:
+        customerId:
+          type: string
+          description: MongoDB ObjectId of the customer
+        productId:
+          type: string
+          description: MongoDB ObjectId of the product
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantity to order
+
+    Order:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: MongoDB ObjectId
+        customerId:
+          type: string
+          description: MongoDB ObjectId of the customer
+        productId:
+          type: string
+          description: MongoDB ObjectId of the product
+        quantity:
+          type: integer
+          description: Quantity ordered
+        amount:
+          type: integer
+          description: Total amount in smallest currency unit
+        status:
+          type: string
+          enum: [pending, confirmed, failed]
+          description: Order status
+        createdAt:
+          type: string
+          format: date-time
+        paymentToken:
+          type: string
+          format: uuid
+          description: UUID token for payment processing
+
+    PaymentResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+          description: Unique transaction identifier
+        orderId:
+          type: string
+          description: MongoDB ObjectId of the order
+        amount:
+          type: integer
+          description: Payment amount in smallest currency unit
+        status:
+          type: string
+          enum: [success, failure]
+          description: Payment status
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
