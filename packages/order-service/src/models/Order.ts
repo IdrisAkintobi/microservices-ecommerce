@@ -11,31 +11,39 @@ export interface IOrder extends Document {
   updatedAt: Date;
 }
 
-const orderSchema = new Schema<IOrder>({
-  customerId: { type: String, required: true },
-  productId: { type: String, required: true },
-  quantity: { type: Number, required: true, min: 1 },
-  amount: { type: Number, required: true, min: 0 },
-  status: { 
-    type: String, 
-    enum: ['pending', 'confirmed', 'failed', 'cancelled', 'refunded'],
-    default: 'pending' 
+const orderSchema = new Schema<IOrder>(
+  {
+    customerId: { type: String, required: true, index: true },
+    productId: { type: String, required: true, index: true },
+    quantity: { type: Number, required: true, min: 1 },
+    amount: { type: Number, required: true, min: 0 },
+    status: {
+      type: String,
+      enum: ['pending', 'confirmed', 'failed', 'cancelled', 'refunded'],
+      default: 'pending',
+      index: true,
+    },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
   },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-}, {
-  toJSON: {
-    transform: (_doc, ret) => {
-      const obj = ret as Record<string, unknown>;
-      obj.id = ret._id.toString();
-      delete obj._id;
-      delete obj.__v;
-      return obj;
-    }
+  {
+    toJSON: {
+      transform: (_doc, ret) => {
+        const obj = ret as Record<string, unknown>;
+        obj.id = ret._id.toString();
+        delete obj._id;
+        delete obj.__v;
+        return obj;
+      },
+    },
   }
-});
+);
 
-orderSchema.pre('save', function(next) {
+// Compound indexes for common query patterns
+orderSchema.index({ customerId: 1, createdAt: -1 }); // Customer's orders by date
+orderSchema.index({ status: 1, createdAt: -1 }); // Orders by status and date
+
+orderSchema.pre('save', function (next) {
   this.updatedAt = new Date();
   next();
 });
