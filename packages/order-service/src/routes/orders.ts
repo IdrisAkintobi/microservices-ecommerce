@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import mongoose from 'mongoose';
-import { Order } from '../models/Order';
+import { Order, IOrder } from '../models/Order';
 import { logger } from '../config/logger';
 import { checkIdempotency, setIdempotency } from '../services/idempotency';
 import { validateCustomer, reserveStock } from '../services/validation';
@@ -21,10 +21,16 @@ const createOrderSchema = z.object({
 });
 
 // Helper: Build order response with optional payment token
-async function buildOrderResponse(order: any): Promise<OrderResponse> {
-  const paymentToken = order.status === 'pending'
-    ? await generatePaymentToken(order._id.toString(), order.productId, order.quantity, order.amount)
-    : undefined;
+async function buildOrderResponse(order: IOrder): Promise<OrderResponse> {
+  const paymentToken =
+    order.status === 'pending'
+      ? await generatePaymentToken(
+          order._id.toString(),
+          order.productId,
+          order.quantity,
+          order.amount
+        )
+      : undefined;
 
   return {
     orderId: order._id.toString(),
@@ -42,7 +48,7 @@ async function buildOrderResponse(order: any): Promise<OrderResponse> {
 ordersRouter.post('/', async (req, res): Promise<void> => {
   try {
     const idempotencyKey = req.headers['idempotency-key'] as string;
-    
+
     if (!idempotencyKey) {
       res.status(400).json({ error: 'idempotency-key header is required' });
       return;
@@ -53,7 +59,10 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
     if (existingOrderId) {
       const existingOrder = await Order.findById(existingOrderId);
       if (existingOrder) {
-        logger.info({ orderId: existingOrderId, status: existingOrder.status }, 'Returning cached order (idempotent)');
+        logger.info(
+          { orderId: existingOrderId, status: existingOrder.status },
+          'Returning cached order (idempotent)'
+        );
         const response = await buildOrderResponse(existingOrder);
         res.json(response);
         return;
@@ -78,9 +87,9 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
     // Reserve stock and get product price
     const productData = await reserveStock(productId, quantity);
     if ('error' in productData) {
-      res.status(productData.error === 'Product not found' ? 404 : 409).json({ 
+      res.status(productData.error === 'Product not found' ? 404 : 409).json({
         error: productData.error,
-        ...(productData.available !== undefined && { available: productData.available })
+        ...(productData.available !== undefined && { available: productData.available }),
       });
       return;
     }

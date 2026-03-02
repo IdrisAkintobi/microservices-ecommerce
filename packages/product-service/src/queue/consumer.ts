@@ -23,7 +23,7 @@ async function handleSuccessMessage(msg: amqp.ConsumeMessage | null): Promise<vo
     logger.info({ orderId: event.orderId }, 'Received payment.succeeded event');
 
     // Extract productId and quantity from event
-    const { productId, quantity } = event as any;
+    const { productId, quantity } = event;
 
     if (!productId || !quantity) {
       logger.error({ orderId: event.orderId }, 'Missing productId or quantity in payment event');
@@ -88,7 +88,7 @@ async function handleFailedMessage(msg: amqp.ConsumeMessage | null): Promise<voi
     logger.info({ orderId: event.orderId }, 'Received payment.failed event');
 
     // Extract productId and quantity from event
-    const { productId, quantity } = event as any;
+    const { productId, quantity } = event;
 
     if (!productId || !quantity) {
       logger.error({ orderId: event.orderId }, 'Missing productId or quantity in payment event');

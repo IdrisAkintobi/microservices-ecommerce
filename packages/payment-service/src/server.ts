@@ -1,3 +1,4 @@
+import { Server } from 'node:http';
 import { app } from './app';
 import { connectDB } from './config/db';
 import { connectPublisher, disconnectPublisher } from './queue/publisher';
@@ -6,7 +7,7 @@ import { logger } from './config/logger';
 import { valkey } from './config/valkey';
 import mongoose from 'mongoose';
 
-let server: any = null;
+let server: Server | null = null;
 
 export async function startServer(port?: number): Promise<void> {
   const serverPort = port || config.PORT;
@@ -18,7 +19,7 @@ export async function startServer(port?: number): Promise<void> {
 
 export async function stopServer(): Promise<void> {
   if (server) {
-    await new Promise<void>((resolve) => server.close(resolve));
+    server.close();
     logger.info('HTTP server closed');
   }
 

@@ -11,7 +11,7 @@ paymentsRouter.post('/', async (req, res): Promise<void> => {
   try {
     const sessionId = req.query.token as string;
     const simulate = req.query.simulate as 'success' | 'failure' | undefined;
-    
+
     if (!sessionId) {
       res.status(400).json({ error: 'token query parameter is required' });
       return;
@@ -20,13 +20,14 @@ paymentsRouter.post('/', async (req, res): Promise<void> => {
     // Get payment session from Valkey
     const sessionKey = `payment:session:${sessionId}`;
     const sessionData = await valkey.get(sessionKey);
-    
+
     if (!sessionData) {
       res.status(409).json({ error: 'Payment session expired or already processed' });
       return;
     }
 
-    const session = JSON.parse(sessionData);
+    const session: { orderId: string; productId: string; quantity: number; amount: number } =
+      JSON.parse(sessionData);
     const { orderId, productId, quantity, amount } = session;
 
     // Delete session to prevent duplicate payments (consume once)
@@ -43,7 +44,7 @@ paymentsRouter.post('/', async (req, res): Promise<void> => {
         amount,
         status: 'success',
       };
-      
+
       res.json(response);
     } else {
       const response: PaymentResponse = {
@@ -53,10 +54,10 @@ paymentsRouter.post('/', async (req, res): Promise<void> => {
         status: 'failed',
         error: result.error,
       };
-      
+
       res.status(402).json(response);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error({ err }, 'Failed to process payment');
     res.status(500).json({ error: 'Internal server error' });
   }
