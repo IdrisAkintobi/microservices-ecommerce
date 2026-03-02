@@ -3,6 +3,8 @@ import { connectDB } from './config/db';
 import { connectConsumer, disconnectConsumer } from './queue/consumer';
 import { config } from './config';
 import { logger } from './config/logger';
+import { valkey } from './config/valkey';
+import mongoose from 'mongoose';
 
 let server: any = null;
 
@@ -17,15 +19,30 @@ export async function startServer(port?: number): Promise<void> {
 export async function stopServer(): Promise<void> {
   if (server) {
     await new Promise<void>((resolve) => server.close(resolve));
+    logger.info('HTTP server closed');
   }
+
   await disconnectConsumer();
-  logger.info('Order service stopped');
+  logger.info('RabbitMQ consumer disconnected');
+
+  await mongoose.disconnect();
+  logger.info('Database connection closed');
+
+  await valkey.quit();
+  logger.info('Valkey connection closed');
 }
 
 process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  await stopServer();
-  process.exit(0);
+  logger.info('SIGTERM received, starting graceful shutdown');
+
+  try {
+    await stopServer();
+    logger.info('Order service stopped gracefully');
+    process.exit(0);
+  } catch (err) {
+    logger.error({ err }, 'Error during shutdown');
+    process.exit(1);
+  }
 });
 
 async function start() {
