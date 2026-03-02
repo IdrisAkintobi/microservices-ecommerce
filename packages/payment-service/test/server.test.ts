@@ -212,4 +212,240 @@ describe('Payment Service - API Tests', () => {
       expect(json.__v).toBeUndefined();
     });
   });
+
+  describe('GET /payments/transactions', () => {
+    beforeEach(async () => {
+      await Transaction.deleteMany({});
+    });
+
+    it('should return empty list when no transactions exist', async () => {
+      const response = await request(app)
+        .get('/payments/transactions')
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.data).toEqual([]);
+      expect(response.body.pagination.total).toBe(0);
+      expect(response.body.pagination.hasMore).toBe(false);
+    });
+
+    it('should return paginated list of transactions', async () => {
+      const orderId = new mongoose.Types.ObjectId().toString();
+
+      // Create 3 transactions
+      await Transaction.create([
+        { transactionId: randomUUID(), orderId, amount: 100000, status: 'success' },
+        { transactionId: randomUUID(), orderId, amount: 200000, status: 'success' },
+        {
+          transactionId: randomUUID(),
+          orderId,
+          amount: 300000,
+          status: 'failed',
+          error: 'Declined',
+        },
+      ]);
+
+      const response = await request(app)
+        .get('/payments/transactions')
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.data).toHaveLength(3);
+      expect(response.body.pagination.total).toBe(3);
+      expect(response.body.pagination.limit).toBe(20);
+      expect(response.body.pagination.page).toBe(1);
+      expect(response.body.pagination.totalPages).toBe(1);
+      expect(response.body.pagination.hasMore).toBe(false);
+    });
+
+    it('should filter transactions by orderId', async () => {
+      const orderId1 = new mongoose.Types.ObjectId().toString();
+      const orderId2 = new mongoose.Types.ObjectId().toString();
+
+      await Transaction.create([
+        { transactionId: randomUUID(), orderId: orderId1, amount: 100000, status: 'success' },
+        { transactionId: randomUUID(), orderId: orderId2, amount: 200000, status: 'success' },
+        { transactionId: randomUUID(), orderId: orderId1, amount: 300000, status: 'failed' },
+      ]);
+
+      const response = await request(app)
+        .get('/payments/transactions')
+        .query({ orderId: orderId1 })
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.data).toHaveLength(2);
+      expect(response.body.pagination.total).toBe(2);
+      response.body.data.forEach((txn: { orderId: string }) => {
+        expect(txn.orderId).toBe(orderId1);
+      });
+    });
+
+    it('should filter transactions by status', async () => {
+      const orderId = new mongoose.Types.ObjectId().toString();
+
+      await Transaction.create([
+        { transactionId: randomUUID(), orderId, amount: 100000, status: 'success' },
+        { transactionId: randomUUID(), orderId, amount: 200000, status: 'failed' },
+        { transactionId: randomUUID(), orderId, amount: 300000, status: 'success' },
+      ]);
+
+      const response = await request(app)
+        .get('/payments/transactions')
+        .query({ status: 'success' })
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.data).toHaveLength(2);
+      expect(response.body.pagination.total).toBe(2);
+      response.body.data.forEach((txn: { status: string }) => {
+        expect(txn.status).toBe('success');
+      });
+    });
+
+    it('should support pagination with limit and page', async () => {
+      const orderId = new mongoose.Types.ObjectId().toString();
+
+      // Create 5 transactions
+      for (let i = 0; i < 5; i++) {
+        await Transaction.create({
+          transactionId: randomUUID(),
+          orderId,
+          amount: (i + 1) * 100000,
+          status: 'success',
+        });
+      }
+
+      const response = await request(app)
+        .get('/payments/transactions')
+        .query({ limit: 2, page: 2 })
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.data).toHaveLength(2);
+      expect(response.body.pagination.total).toBe(5);
+      expect(response.body.pagination.limit).toBe(2);
+      expect(response.body.pagination.page).toBe(2);
+      expect(response.body.pagination.totalPages).toBe(3);
+      expect(response.body.pagination.hasMore).toBe(true);
+    });
+
+    it('should sort transactions by createdAt descending by default', async () => {
+      const orderId = new mongoose.Types.ObjectId().toString();
+
+      const txn1 = await Transaction.create({
+        transactionId: randomUUID(),
+        orderId,
+        amount: 100000,
+        status: 'success',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const txn2 = await Transaction.create({
+        transactionId: randomUUID(),
+        orderId,
+        amount: 200000,
+        status: 'success',
+      });
+
+      const response = await request(app)
+        .get('/payments/transactions')
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.data[0].transactionId).toBe(txn2.transactionId);
+      expect(response.body.data[1].transactionId).toBe(txn1.transactionId);
+    });
+
+    it('should sort transactions by amount ascending', async () => {
+      const orderId = new mongoose.Types.ObjectId().toString();
+
+      await Transaction.create([
+        { transactionId: randomUUID(), orderId, amount: 300000, status: 'success' },
+        { transactionId: randomUUID(), orderId, amount: 100000, status: 'success' },
+        { transactionId: randomUUID(), orderId, amount: 200000, status: 'success' },
+      ]);
+
+      const response = await request(app)
+        .get('/payments/transactions')
+        .query({ sortBy: 'amount', sortOrder: 'asc' })
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.data[0].amount).toBe(100000);
+      expect(response.body.data[1].amount).toBe(200000);
+      expect(response.body.data[2].amount).toBe(300000);
+    });
+
+    it('should enforce maximum limit of 100', async () => {
+      const response = await request(app)
+        .get('/payments/transactions')
+        .query({ limit: 200 })
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.pagination.limit).toBe(100);
+    });
+
+    it('should return 401 without API key', async () => {
+      await request(app).get('/payments/transactions').expect(401);
+    });
+  });
+
+  describe('GET /payments/transactions/:id', () => {
+    it('should return transaction by id', async () => {
+      const transactionId = randomUUID();
+      const orderId = new mongoose.Types.ObjectId().toString();
+
+      await Transaction.create({
+        transactionId,
+        orderId,
+        amount: 500000,
+        status: 'success',
+      });
+
+      const response = await request(app)
+        .get(`/payments/transactions/${transactionId}`)
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.transactionId).toBe(transactionId);
+      expect(response.body.orderId).toBe(orderId);
+      expect(response.body.amount).toBe(500000);
+      expect(response.body.status).toBe('success');
+    });
+
+    it('should return transaction with error field for failed transactions', async () => {
+      const transactionId = randomUUID();
+      const orderId = new mongoose.Types.ObjectId().toString();
+
+      await Transaction.create({
+        transactionId,
+        orderId,
+        amount: 100000,
+        status: 'failed',
+        error: 'Payment declined by gateway',
+      });
+
+      const response = await request(app)
+        .get(`/payments/transactions/${transactionId}`)
+        .set('x-service-key', API_KEY)
+        .expect(200);
+
+      expect(response.body.status).toBe('failed');
+      expect(response.body.error).toBe('Payment declined by gateway');
+    });
+
+    it('should return 404 for non-existent transaction', async () => {
+      const fakeId = randomUUID();
+      await request(app)
+        .get(`/payments/transactions/${fakeId}`)
+        .set('x-service-key', API_KEY)
+        .expect(404);
+    });
+
+    it('should return 401 without API key', async () => {
+      const transactionId = randomUUID();
+      await request(app).get(`/payments/transactions/${transactionId}`).expect(401);
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { processPayment } from '../services/payment';
 import { logger } from '../config/logger';
 import { valkey } from '../config/valkey';
+import { Transaction } from '../models/Transaction';
 import type { PaymentResponse } from '@microservice/shared';
 
 export const paymentsRouter = Router();
@@ -59,6 +60,96 @@ paymentsRouter.post('/', async (req, res): Promise<void> => {
     }
   } catch (err: unknown) {
     logger.error({ err }, 'Failed to process payment');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /payments/transactions — list transactions with pagination and filters
+paymentsRouter.get('/transactions', async (req, res): Promise<void> => {
+  try {
+    const {
+      orderId,
+      status,
+      limit = '20',
+      page = '1',
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = req.query;
+
+    // Build filter
+    const filter: Record<string, unknown> = {};
+    if (orderId) {
+      filter.orderId = orderId;
+    }
+    if (status) {
+      filter.status = status;
+    }
+
+    // Parse pagination
+    const limitNum = Math.min(Math.max(parseInt(limit as string, 10), 1), 100);
+    const pageNum = Math.max(parseInt(page as string, 10), 1);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build sort
+    const sort: Record<string, 1 | -1> = {};
+    sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
+
+    // Query with pagination
+    const [transactions, total] = await Promise.all([
+      Transaction.find(filter).sort(sort).skip(skip).limit(limitNum),
+      Transaction.countDocuments(filter),
+    ]);
+
+    const totalPages = Math.ceil(total / limitNum);
+
+    const response = {
+      data: transactions.map((t) => ({
+        transactionId: t.transactionId,
+        orderId: t.orderId,
+        amount: t.amount,
+        status: t.status,
+        error: t.error,
+        createdAt: t.createdAt.toISOString(),
+      })),
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages,
+        hasMore: pageNum < totalPages,
+      },
+    };
+
+    res.json(response);
+  } catch (err) {
+    logger.error({ err }, 'Failed to list transactions');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /payments/transactions/:id — get transaction by ID
+paymentsRouter.get('/transactions/:id', async (req, res): Promise<void> => {
+  try {
+    const transactionId = req.params.id;
+
+    const transaction = await Transaction.findOne({ transactionId });
+    if (!transaction) {
+      res.status(404).json({ error: 'Transaction not found' });
+      return;
+    }
+
+    const response = {
+      transactionId: transaction.transactionId,
+      orderId: transaction.orderId,
+      amount: transaction.amount,
+      status: transaction.status,
+      error: transaction.error,
+      createdAt: transaction.createdAt.toISOString(),
+    };
+
+    res.json(response);
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch transaction');
     res.status(500).json({ error: 'Internal server error' });
   }
 });

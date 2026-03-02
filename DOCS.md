@@ -80,6 +80,7 @@
 ### Why ValKey Payment Sessions?
 
 **Benefits:**
+
 - ✅ No HTTP calls between services (payment has all data in session)
 - ✅ Secure (session consumed once, prevents replay)
 - ✅ Stateless services (session stored in ValKey)
@@ -88,6 +89,7 @@
 - ✅ Auto-expiry (1 hour TTL)
 
 **How It Works:**
+
 1. Order service generates UUID session ID
 2. Stores payment data in ValKey: `payment:session:{uuid}`
 3. Returns session ID to client as `paymentToken`
@@ -106,6 +108,7 @@
 **Database**: customer-db (MongoDB)
 
 **Endpoints**:
+
 - `GET /customers` - List all customers
 - `GET /customers/:id` - Get customer by ID (for validation)
 - `POST /customers/:id/orders` - Add order to customer (notification)
@@ -121,6 +124,7 @@
 **Cache**: ValKey (stock reservations)
 
 **Endpoints**:
+
 - `GET /products` - List all products
 - `GET /products/:id` - Get product by ID
 - `POST /products/:id/reserve` - Reserve stock (called by order-service)
@@ -140,7 +144,9 @@
 **Cache**: ValKey (idempotency keys, payment sessions)
 
 **Endpoints**:
+
 - `POST /orders` - Create order, return payment token
+- `GET /orders` - List orders with pagination and filters
 - `GET /orders/:id` - Get order details
 
 **Publishes**: Nothing
@@ -156,7 +162,10 @@
 **Database**: payment-db (MongoDB)
 
 **Endpoints**:
+
 - `POST /payments?token={jwt}&simulate=success|failure` - Process payment
+- `GET /payments/transactions` - List transactions with pagination and filters
+- `GET /payments/transactions/:id` - Get transaction by ID
 
 **Publishes**: `payment.succeeded`, `payment.failed`
 
@@ -169,6 +178,7 @@
 ## Data Models
 
 ### Customer
+
 ```typescript
 {
   _id: ObjectId,
@@ -179,6 +189,7 @@
 ```
 
 ### Product
+
 ```typescript
 {
   _id: ObjectId,
@@ -190,6 +201,7 @@
 ```
 
 ### Order
+
 ```typescript
 {
   _id: ObjectId,
@@ -204,6 +216,7 @@
 ```
 
 ### Transaction
+
 ```typescript
 {
   _id: ObjectId,
@@ -217,6 +230,7 @@
 ```
 
 ### Payment Session (ValKey)
+
 ```typescript
 {
   orderId: string,
@@ -232,6 +246,7 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 ### Events
 
 **payment.succeeded**
+
 ```typescript
 {
   orderId: string,
@@ -244,6 +259,7 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 ```
 
 **payment.failed**
+
 ```typescript
 {
   orderId: string,
@@ -264,11 +280,13 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 **Endpoint**: `POST /orders`
 
 **Headers**:
+
 - `Content-Type: application/json`
 - `x-service-key: super-secret-internal-key-change-in-prod`
 - `idempotency-key: <uuid>`
 
 **Request Body**:
+
 ```json
 {
   "customerId": "67890abcdef1234567890abc",
@@ -278,6 +296,7 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 ```
 
 **Response** (201):
+
 ```json
 {
   "orderId": "67890abcdef1234567890xyz",
@@ -294,6 +313,7 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 **Note**: Use `paymentToken` to construct payment URL: `http://localhost:3004/payments?token={paymentToken}`
 
 **Errors**:
+
 - `400` - Missing idempotency-key or invalid request body
 - `401` - Missing or invalid x-service-key
 - `404` - Customer or product not found
@@ -304,9 +324,11 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 **Endpoint**: `GET /orders/:id`
 
 **Headers**:
+
 - `x-service-key: super-secret-internal-key-change-in-prod`
 
 **Response** (200):
+
 ```json
 {
   "orderId": "67890abcdef1234567890xyz",
@@ -322,6 +344,7 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 **Note**: `paymentToken` is only included when status is "pending"
 
 **Errors**:
+
 - `401` - Missing or invalid x-service-key
 - `404` - Order not found
 
@@ -330,10 +353,12 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 **Endpoint**: `POST /payments?token={sessionId}&simulate=success|failure`
 
 **Query Parameters**:
+
 - `token` (required) - Payment session ID from order response
 - `simulate` (optional) - `success` or `failure` (for testing)
 
 **Response** (200 for success):
+
 ```json
 {
   "transactionId": "550e8400-e29b-41d4-a716-446655440000",
@@ -344,6 +369,7 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 ```
 
 **Response** (402 for failure):
+
 ```json
 {
   "transactionId": "550e8400-e29b-41d4-a716-446655440001",
@@ -355,6 +381,7 @@ Stored at: `payment:session:{uuid}` with 1 hour TTL
 ```
 
 **Errors**:
+
 - `400` - Missing token parameter
 - `409` - Payment session expired or already processed
 
@@ -376,6 +403,7 @@ headers: {
 **Production**: Replace with mTLS (mutual TLS)
 
 **Why mTLS?**
+
 - Mutual authentication at TLS layer
 - No token management overhead
 - Certificate rotation via cert-manager
@@ -393,6 +421,7 @@ headers: {
 **Consume Once**: Session deleted after first use (prevents replay)
 
 **Why ValKey Sessions over JWT?**
+
 - Simpler (no signing/verification)
 - Faster (no crypto overhead)
 - Consume-once guarantee (delete after use)
@@ -422,6 +451,7 @@ await valkey.set(`idempotency:${key}`, orderId, 'EX', 86400);
 **TTL**: 24 hours (auto-expires)
 
 **Why ValKey?**
+
 - Distributed (works across replicas)
 - Fast (sub-millisecond latency)
 - Atomic (SET NX prevents race conditions)
@@ -474,18 +504,21 @@ packages/
 ### Code Style
 
 **TypeScript**:
+
 - Use strict mode
 - Prefer `const` over `let`
 - Use async/await over promises
 - Avoid `any` type
 
 **Naming**:
+
 - Files: kebab-case (`order-service.ts`)
 - Classes: PascalCase (`OrderService`)
 - Functions: camelCase (`createOrder`)
 - Constants: UPPER_SNAKE_CASE (`MAX_RETRIES`)
 
 **Error Handling**:
+
 - Always log errors with context
 - Use try/catch for async operations
 - Return meaningful error messages
@@ -494,11 +527,13 @@ packages/
 ### Testing
 
 **Automated Test**:
+
 ```bash
 ./scripts/test-flow.sh
 ```
 
 **Manual Test**:
+
 ```bash
 # Get IDs
 ./scripts/get-ids.sh
@@ -527,6 +562,7 @@ curl http://localhost:3003/orders/{orderId} \
 **Symptom**: `Error: Cannot connect to MongoDB`
 
 **Solution**:
+
 ```bash
 # Check infrastructure
 docker compose ps
@@ -543,6 +579,7 @@ npm run down && npm run dev
 **Symptom**: `Error: bind: address already in use`
 
 **Solution**:
+
 ```bash
 # Find process
 lsof -i :3003
@@ -556,6 +593,7 @@ kill -9 <PID>
 **Symptom**: `❌ Customers already seeded`
 
 **Solution**:
+
 ```bash
 # Delete volumes and reseed
 npm run down
@@ -568,6 +606,7 @@ npm run seed
 **Symptom**: `{"error": "Customer not found"}`
 
 **Solution**:
+
 ```bash
 # Verify seed data
 npm run seed
@@ -581,6 +620,7 @@ npm run seed
 **Symptom**: `401 Unauthorized`
 
 **Solution**:
+
 - Check JWT_SECRET is same in both services
 - Check token hasn't expired (1 hour)
 - Generate new secret: `npm run generate-keys`
@@ -590,6 +630,7 @@ npm run seed
 **Symptom**: Order stays "pending"
 
 **Solution**:
+
 ```bash
 # Check RabbitMQ
 docker compose logs rabbitmq
@@ -604,6 +645,7 @@ docker compose logs payment-service | grep "Published payment"
 ### RabbitMQ Messages Not Processing
 
 **Solution**:
+
 1. Open http://localhost:15672 (guest/guest)
 2. Check queues: `payment.succeeded`, `payment.failed`
 3. Look for messages stuck in queues
@@ -612,6 +654,7 @@ docker compose logs payment-service | grep "Published payment"
 ### Debugging Tips
 
 **View Logs**:
+
 ```bash
 # All services
 npm run logs
@@ -624,6 +667,7 @@ docker compose logs --tail=100 order-service
 ```
 
 **Inspect Database**:
+
 ```bash
 # MongoDB
 docker compose exec mongodb mongosh
@@ -632,6 +676,7 @@ db.orders.find().pretty()
 ```
 
 **Inspect ValKey**:
+
 ```bash
 # Connect
 docker compose exec valkey valkey-cli
@@ -647,6 +692,7 @@ TTL idempotency:YOUR-KEY
 ```
 
 **Inspect RabbitMQ**:
+
 ```bash
 # List queues
 docker compose exec rabbitmq rabbitmqctl list_queues
@@ -664,26 +710,31 @@ docker compose exec rabbitmq rabbitmqctl list_exchanges
 #### Infrastructure
 
 **API Gateway**:
+
 - Current: Services exposed directly
 - Production: Kong, Traefik, or AWS API Gateway
 - Benefits: Rate limiting, auth, routing, SSL termination
 
 **mTLS**:
+
 - Current: X-Service-Key header
 - Production: Mutual TLS certificates
 - Benefits: Stronger auth, automatic with service mesh
 
 **Distributed Tracing**:
+
 - Current: None
 - Production: OpenTelemetry + Jaeger/Zipkin
 - Benefits: Trace requests across services, identify bottlenecks
 
 **Centralized Logging**:
+
 - Current: Per-service logs
 - Production: ELK stack (Elasticsearch, Logstash, Kibana)
 - Benefits: Search logs, create dashboards, set alerts
 
 **Metrics**:
+
 - Current: None
 - Production: Prometheus + Grafana
 - Benefits: Monitor performance, resource usage, error rates
@@ -691,16 +742,19 @@ docker compose exec rabbitmq rabbitmqctl list_exchanges
 #### Resilience
 
 **Circuit Breakers**:
+
 - Current: None
 - Production: Hystrix or Resilience4j
 - Benefits: Prevent cascade failures, fail fast
 
 **Rate Limiting**:
+
 - Current: None
 - Production: Rate limiting middleware or API Gateway
 - Benefits: Prevent abuse, protect resources
 
 **Outbox Pattern**:
+
 - Current: Direct event publishing
 - Production: Transactional outbox
 - Benefits: Guaranteed event delivery, no lost messages
@@ -708,16 +762,19 @@ docker compose exec rabbitmq rabbitmqctl list_exchanges
 #### Business Logic
 
 **Real Payment Gateway**:
+
 - Current: Simulated payment
 - Production: Stripe, PayPal, Square
 - Benefits: Real transactions, 3D Secure, webhooks
 
 **Inventory Service**:
+
 - Current: None
 - Production: Stock management with optimistic locking
 - Benefits: Prevent overselling, track inventory
 
 **Notification Service**:
+
 - Current: None
 - Production: Email/SMS notifications
 - Benefits: Order confirmations, shipping updates
@@ -729,6 +786,7 @@ docker compose exec rabbitmq rabbitmqctl list_exchanges
 **Production**: Kubernetes
 
 **Kubernetes Resources**:
+
 - Deployments for each service
 - Services for internal communication
 - Ingress for external traffic
@@ -738,6 +796,7 @@ docker compose exec rabbitmq rabbitmqctl list_exchanges
 - PersistentVolumes for databases
 
 **CI/CD Pipeline**:
+
 1. Lint + type check
 2. Run unit tests
 3. Build Docker images
@@ -750,27 +809,32 @@ docker compose exec rabbitmq rabbitmqctl list_exchanges
 ### Scaling
 
 **Horizontal Scaling**:
+
 - All services are stateless (except ValKey)
 - Can run multiple replicas behind load balancer
 - RabbitMQ distributes messages across consumers
 
 **Database Sharding**:
+
 - Each service owns its database
 - Can shard by customer ID, region, etc.
 
 **Caching**:
+
 - Add ValKey cache for customer/product lookups
 - Reduce DB load by 80-90%
 
 ### Cost Optimization
 
 **Development**:
+
 - Docker Compose (free)
 - Single MongoDB instance
 - Single RabbitMQ instance
 - Single ValKey instance
 
 **Production**:
+
 - Managed services (MongoDB Atlas, Amazon MQ, ElastiCache)
 - Right-size instances (start small, scale up)
 - Spot instances for non-critical workloads
@@ -779,12 +843,14 @@ docker compose exec rabbitmq rabbitmqctl list_exchanges
 ### Monitoring
 
 **Metrics to Track**:
+
 - Request rate, latency, error rate (RED)
 - Queue depth, message processing time
 - DB connection pool usage
 - Memory and CPU usage
 
 **Alerts**:
+
 - Service down
 - High error rate (>5%)
 - Queue backlog (>1000 messages)

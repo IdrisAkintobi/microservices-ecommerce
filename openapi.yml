@@ -137,6 +137,74 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   /orders:
+    get:
+      tags:
+        - orders
+      summary: List orders
+      description: |
+        Retrieve a paginated list of orders with optional filters.
+
+        **Query Parameters:**
+        - `customerId` (optional): Filter by customer MongoDB ObjectId
+        - `status` (optional): Filter by order status (pending, confirmed, failed, cancelled, refunded)
+        - `page` (optional): Page number, starts at 1 (default: 1)
+        - `limit` (optional): Results per page, max 100 (default: 20)
+        - `sortBy` (optional): Field to sort by - createdAt or amount (default: createdAt)
+        - `sortOrder` (optional): Sort direction - asc or desc (default: desc)
+      parameters:
+        - name: customerId
+          in: query
+          required: false
+          description: Filter by customer ID
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          description: Filter by order status
+          schema:
+            type: string
+            enum: [pending, confirmed, failed, cancelled, refunded]
+        - name: page
+          in: query
+          required: false
+          description: Page number (starts at 1)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          description: Number of results per page (max 100)
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sortBy
+          in: query
+          required: false
+          description: Field to sort by
+          schema:
+            type: string
+            enum: [createdAt, amount]
+            default: createdAt
+        - name: sortOrder
+          in: query
+          required: false
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrders'
     post:
       tags:
         - orders
@@ -284,6 +352,113 @@ paths:
               example:
                 error: 'Payment session expired or already processed'
 
+  /payments/transactions:
+    get:
+      tags:
+        - payments
+      summary: List transactions
+      description: |
+        Retrieve a paginated list of payment transactions with optional filters.
+
+        **Query Parameters:**
+        - `orderId` (optional): Filter by order MongoDB ObjectId
+        - `status` (optional): Filter by transaction status (success, failed)
+        - `page` (optional): Page number, starts at 1 (default: 1)
+        - `limit` (optional): Results per page, max 100 (default: 20)
+        - `sortBy` (optional): Field to sort by - createdAt or amount (default: createdAt)
+        - `sortOrder` (optional): Sort direction - asc or desc (default: desc)
+      parameters:
+        - name: orderId
+          in: query
+          required: false
+          description: Filter by order ID
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          description: Filter by transaction status
+          schema:
+            type: string
+            enum: [success, failed]
+        - name: page
+          in: query
+          required: false
+          description: Page number (starts at 1)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          description: Number of results per page (max 100)
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sortBy
+          in: query
+          required: false
+          description: Field to sort by
+          schema:
+            type: string
+            enum: [createdAt, amount]
+            default: createdAt
+        - name: sortOrder
+          in: query
+          required: false
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTransactions'
+
+  /payments/transactions/{id}:
+    get:
+      tags:
+        - payments
+      summary: Get transaction by ID
+      description: Retrieve a specific transaction by its transaction ID (UUID)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Transaction UUID
+          schema:
+            type: string
+            format: uuid
+            example: '8530db4e-4505-4813-9f62-149eb0758856'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              example:
+                transactionId: '8530db4e-4505-4813-9f62-149eb0758856'
+                orderId: '69a2ad6ed39f9a83c4e9c527'
+                amount: 520000
+                status: 'success'
+                createdAt: '2026-02-28T09:15:30.142Z'
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Transaction not found'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -391,6 +566,83 @@ components:
           type: string
           enum: [success, failure]
           description: Payment status
+
+    Transaction:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+          description: Unique transaction identifier
+        orderId:
+          type: string
+          description: MongoDB ObjectId of the order
+        amount:
+          type: integer
+          description: Payment amount in smallest currency unit
+        status:
+          type: string
+          enum: [success, failed]
+          description: Transaction status
+        error:
+          type: string
+          description: Error message (only present for failed transactions)
+        createdAt:
+          type: string
+          format: date-time
+          description: Transaction creation timestamp
+
+    PaginatedOrders:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: Total number of orders matching the filter
+            page:
+              type: integer
+              description: Current page number
+            limit:
+              type: integer
+              description: Number of results per page
+            totalPages:
+              type: integer
+              description: Total number of pages
+            hasMore:
+              type: boolean
+              description: Whether more results are available
+
+    PaginatedTransactions:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: Total number of transactions matching the filter
+            page:
+              type: integer
+              description: Current page number
+            limit:
+              type: integer
+              description: Number of results per page
+            totalPages:
+              type: integer
+              description: Total number of pages
+            hasMore:
+              type: boolean
+              description: Whether more results are available
 
     Error:
       type: object

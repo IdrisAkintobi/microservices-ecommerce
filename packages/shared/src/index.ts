@@ -81,3 +81,23 @@ export interface PaymentResponse {
   status: 'success' | 'failed';
   error?: string;
 }
+
+export interface TransactionResponse {
+  transactionId: string;
+  orderId: string;
+  amount: number;
+  status: 'success' | 'failed';
+  error?: string;
+  createdAt: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+}

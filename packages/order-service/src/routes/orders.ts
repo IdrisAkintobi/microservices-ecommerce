@@ -30,7 +30,9 @@ function buildOrderResponse(order: IOrder): OrderResponse {
     amount: order.amount,
     status: order.status,
     createdAt: order.createdAt.toISOString(),
-    ...(order.paymentToken ? { paymentToken: order.paymentToken } : {}),
+    ...(order.status === 'pending' && order.paymentToken
+      ? { paymentToken: order.paymentToken }
+      : {}),
   };
 }
 
@@ -119,6 +121,66 @@ ordersRouter.post('/', async (req, res): Promise<void> => {
     res.status(201).json(response);
   } catch (err) {
     logger.error({ err }, 'Failed to create order');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /orders — list orders with pagination and filters
+ordersRouter.get('/', async (req, res): Promise<void> => {
+  try {
+    const {
+      customerId,
+      status,
+      limit = '20',
+      page = '1',
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = req.query;
+
+    // Build filter
+    const filter: Record<string, unknown> = {};
+    if (customerId) {
+      if (!mongoose.Types.ObjectId.isValid(customerId as string)) {
+        res.status(400).json({ error: 'Invalid customerId format' });
+        return;
+      }
+      filter.customerId = customerId;
+    }
+    if (status) {
+      filter.status = status;
+    }
+
+    // Parse pagination
+    const limitNum = Math.min(Math.max(parseInt(limit as string, 10), 1), 100);
+    const pageNum = Math.max(parseInt(page as string, 10), 1);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build sort
+    const sort: Record<string, 1 | -1> = {};
+    sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
+
+    // Query with pagination
+    const [orders, total] = await Promise.all([
+      Order.find(filter).sort(sort).skip(skip).limit(limitNum),
+      Order.countDocuments(filter),
+    ]);
+
+    const totalPages = Math.ceil(total / limitNum);
+
+    const response = {
+      data: orders.map(buildOrderResponse),
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages,
+        hasMore: pageNum < totalPages,
+      },
+    };
+
+    res.json(response);
+  } catch (err) {
+    logger.error({ err }, 'Failed to list orders');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
