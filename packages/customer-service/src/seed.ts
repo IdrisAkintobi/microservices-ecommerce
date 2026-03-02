@@ -5,13 +5,6 @@ import { logger } from './config/logger';
 async function seed() {
   await connectDB();
 
-  const existingCount = await Customer.countDocuments();
-  if (existingCount > 0) {
-    logger.info('Customers already seeded, skipping');
-    await disconnectDB();
-    return;
-  }
-
   const customers = [
     { name: 'Adebayo Okonkwo', email: 'adebayo.okonkwo@example.ng' },
     { name: 'Chioma Nwankwo', email: 'chioma.nwankwo@example.ng' },
@@ -20,8 +13,32 @@ async function seed() {
     { name: 'Oluwaseun Adeyemi', email: 'oluwaseun.adeyemi@example.ng' },
   ];
 
-  await Customer.insertMany(customers);
-  logger.info({ count: customers.length }, 'Customers seeded');
+  let created = 0;
+  let updated = 0;
+
+  for (const customerData of customers) {
+    try {
+      const result = await Customer.findOneAndUpdate(
+        { email: customerData.email }, // Find by unique field
+        customerData, // Update data
+        {
+          upsert: true, // Create if doesn't exist
+          new: true, // Return updated document
+          setDefaultsOnInsert: true, // Set defaults on insert
+        }
+      );
+
+      if (result.isNew) {
+        created++;
+      } else {
+        updated++;
+      }
+    } catch (err) {
+      logger.error({ err, email: customerData.email }, 'Failed to upsert customer');
+    }
+  }
+
+  logger.info({ created, updated, total: customers.length }, 'Customer seeding completed');
   await disconnectDB();
 }
 
